@@ -1,12 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 
-	"github.com/masterzen/winrm"
+	"github.com/kckecheng/osprobe/probe"
+	"github.com/kckecheng/osprobe/probe/windows"
+	log "github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -15,32 +16,27 @@ func main() {
 		panic(err)
 	}
 
-	var config map[string]string
+	var config probe.Server
 	err = json.Unmarshal(jbytes, &config)
 	if err != nil {
 		panic(err)
 	}
 
-	endpoint := winrm.NewEndpoint(config["host"], 5985, false, false, nil, nil, nil, 0)
-	client, err := winrm.NewClient(endpoint, config["user"], config["password"])
+	var p probe.Probe
+	p, err = windows.NewWinServer(config.Host, config.User, config.Password, config.Port)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
 
-	cpups := "(Get-WmiObject win32_processor | Select-Object -Property LoadPercentage | ConvertTo-Json).ToString()"
-	memps := "Get-WmiObject win32_OperatingSystem | Select-Object -Property FreePhysicalMemory,TotalVisibleMemorySize | ConvertTo-Json"
-
-	var buf bytes.Buffer
-	_, err = client.Run(winrm.Powershell(cpups), &buf, ioutil.Discard)
+	cusage, err := p.GetCPUUsage()
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
-	fmt.Println(buf.String())
+	fmt.Printf("CPU usage: %+v\n", cusage)
 
-	buf.Reset()
-	_, err = client.Run(winrm.Powershell(memps), &buf, ioutil.Discard)
+	musage, err := p.GetMemUsage()
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
-	fmt.Println(buf.String())
+	fmt.Printf("Memory usage: %+v\n", musage)
 }
