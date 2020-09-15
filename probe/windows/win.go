@@ -152,7 +152,9 @@ func (win WinServer) extractStats(cmd string, stats interface{}) error {
 		output = "[" + output + "]"
 	}
 
-	err = json.Unmarshal([]byte(output), &stats)
+	// why below 2 x line of codes work the same???
+	// err = json.Unmarshal([]byte(output), &stats)
+	err = json.Unmarshal([]byte(output), stats)
 	if err != nil {
 		log.Errorf("Fail to extract stats %s with error %s", output, err)
 		return err
