@@ -2,9 +2,10 @@ package probe
 
 // Probe interface
 type Probe interface {
-	GetCPUUsage() ([]float64, error)
+	GetCPUUsage() (map[string]float64, error)
 	GetMemUsage() (float64, error)
 	GetLocalDiskUsage() (map[string]float64, error)
+	GetNICUsage() (map[string]map[string]float64, error)
 }
 
 // Server inforamtion to connect to a server

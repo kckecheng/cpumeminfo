@@ -45,4 +45,11 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("Local disk usage: %+v\n", dusage)
+
+	nusage, err := p.GetNICUsage()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("NIC usage: %+v\n", nusage)
+
 }

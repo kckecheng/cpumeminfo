@@ -14,7 +14,6 @@ Prequisites: refer to https://github.com/masterzen/winrm
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"strings"
 
@@ -50,107 +49,52 @@ func NewWinServer(host string, user, password string, port int) (*WinServer, err
 }
 
 // GetCPUUsage implement interface
-func (win WinServer) GetCPUUsage() ([]float64, error) {
-	var ret []float64
-	var err error
+func (win WinServer) GetCPUUsage() (map[string]float64, error) {
+	ret := map[string]float64{}
 
-	cpups := "(Get-WmiObject win32_processor | Select-Object -Property LoadPercentage | ConvertTo-Json).ToString()"
-	log.Infof("Run command %s to get CPU stats", cpups)
-	output, err := win.runCmd(cpups)
+	cmd := "(Get-WmiObject win32_processor | Select-Object -Property DeviceID,LoadPercentage | ConvertTo-Json).ToString()"
+
+	type cpuStats struct {
+		ID   string  `json:"DeviceID"`
+		Load float64 `json:"LoadPercentage"`
+	}
+
+	var cpus []cpuStats
+	err := win.extractStats(cmd, &cpus)
 	if err != nil {
-		return nil, err
+		return ret, err
 	}
 
-	// negative return implies invalid input
-	extractLoad := func(cpu map[string]float64) (float64, error) {
-		load, exists := cpu["LoadPercentage"]
-		if exists {
-			return load, nil
-		}
-		return 0, fmt.Errorf("Key LoadPercentage does not exist within %+v", cpu)
+	for _, cpu := range cpus {
+		ret[cpu.ID] = cpu.Load
 	}
-
-	if strings.HasPrefix(output, "[") {
-		var cpus []map[string]float64
-		err = json.Unmarshal([]byte(output), &cpus)
-		if err != nil {
-			log.Errorf("Fail to decode CPU stats %s with error %s", output, err)
-			return nil, err
-		}
-
-		for _, cpu := range cpus {
-			load, err := extractLoad(cpu)
-			if err != nil {
-				log.Error(err)
-				return nil, err
-			}
-			ret = append(ret, load)
-		}
-		return ret, nil
-	} else if strings.HasPrefix(output, "{") {
-		var cpu map[string]float64
-		err = json.Unmarshal([]byte(output), &cpu)
-		if err != nil {
-			log.Errorf("Fail to decode CPU stats %s with error %s", output, err)
-			return nil, err
-		}
-
-		load, err := extractLoad(cpu)
-		if err != nil {
-			log.Error(err)
-			return nil, err
-		}
-		return append(ret, load), nil
-	}
-
-	err = fmt.Errorf("The command output %s is not a valid json string", output)
-	log.Error(err)
-	return nil, err
+	return ret, nil
 }
 
 // GetMemUsage implement interface
 func (win WinServer) GetMemUsage() (float64, error) {
-	memps := "Get-WmiObject win32_OperatingSystem | Select-Object -Property FreePhysicalMemory,TotalVisibleMemorySize | ConvertTo-Json"
-	log.Infof("Run command %s to get memory stats", memps)
-	output, err := win.runCmd(memps)
+	var ret float64
+
+	cmd := "Get-WmiObject win32_OperatingSystem | Select-Object -Property FreePhysicalMemory,TotalVisibleMemorySize | ConvertTo-Json"
+
+	type memStats struct {
+		Free  float64 `json:"FreePhysicalMemory"`
+		Total float64 `json:"TotalVisibleMemorySize"`
+	}
+
+	var mems []memStats
+	err := win.extractStats(cmd, &mems)
 	if err != nil {
-		return 0, err
+		return ret, err
 	}
-
-	var memory map[string]float64
-	err = json.Unmarshal([]byte(output), &memory)
-	if err != nil {
-		log.Errorf("Fail to decode memory stats %s with error %s", output, err)
-		return 0, err
-	}
-
-	free, exists := memory["FreePhysicalMemory"]
-	if !exists {
-		err = fmt.Errorf("Key FreePhysicalMemory does not exist within %+v", memory)
-		log.Error(err)
-		return 0, err
-	}
-
-	total, exists := memory["TotalVisibleMemorySize"]
-	if !exists {
-		err = fmt.Errorf("Key TotalVisibleMemorySize does not exist within %+v", memory)
-		log.Error(err)
-		return 0, err
-	}
-
-	return 1 - free/total, nil
+	return 1 - mems[0].Free/mems[0].Total, nil
 }
 
 // GetLocalDiskUsage implement interface
 func (win WinServer) GetLocalDiskUsage() (map[string]float64, error) {
 	ret := map[string]float64{}
 
-	ldiskps := "(Get-WmiObject -Class Win32_logicaldisk -Filter DriveType=3 | Select-Object -Property DeviceID,FreeSpace,Size | ConvertTo-Json).ToString()"
-	log.Infof("Run command %s to get local disk stats", ldiskps)
-	output, err := win.runCmd(ldiskps)
-	if err != nil {
-		return nil, err
-	}
+	cmd := "(Get-WmiObject -Class Win32_logicaldisk -Filter DriveType=3 | Select-Object -Property DeviceID,FreeSpace,Size | ConvertTo-Json).ToString()"
 
 	type diskStats struct {
 		DeviceID  string  `json:"DeviceID"`
@@ -158,35 +102,62 @@ func (win WinServer) GetLocalDiskUsage() (map[string]float64, error) {
 		Size      float64 `json:"Size"`
 	}
 
-	if strings.HasPrefix(output, "[") {
-		var disks []diskStats
-		err = json.Unmarshal([]byte(output), &disks)
-		if err != nil {
-			log.Errorf("Fail to decode disk stats %s with error %s", output, err)
-			return nil, err
-		}
-
-		for _, disk := range disks {
-			did := strings.TrimRight(disk.DeviceID, ":")
-			ret[did] = (disk.Size - disk.FreeSpace) / disk.Size
-		}
-		return ret, nil
-	} else if strings.HasPrefix(output, "{") {
-		var disk diskStats
-		err = json.Unmarshal([]byte(output), &disk)
-		if err != nil {
-			log.Errorf("Fail to decode disk stats %s with error %s", output, err)
-			return nil, err
-		}
-
-		did := strings.TrimRight(disk.DeviceID, ":")
-		ret[did] = (disk.Size - disk.FreeSpace) / disk.Size
-		return ret, nil
+	var disks []diskStats
+	err := win.extractStats(cmd, &disks)
+	if err != nil {
+		return nil, err
 	}
 
-	err = fmt.Errorf("The command output %s is not a valid json string", output)
-	log.Error(err)
-	return nil, err
+	for _, disk := range disks {
+		did := strings.TrimRight(disk.DeviceID, ":")
+		ret[did] = (disk.Size - disk.FreeSpace) / disk.Size
+	}
+	return ret, nil
+}
+
+// GetNICUsage implement interface
+func (win WinServer) GetNICUsage() (map[string]map[string]float64, error) {
+	ret := map[string]map[string]float64{}
+
+	cmd := "(Get-NetAdapterStatistics | Select-Object -Property Name,ReceivedBytes,SentBytes | ConvertTo-Json).ToString()"
+
+	type nicStats struct {
+		Name     string  `json:"Name"`
+		Received float64 `json:"ReceivedBytes"`
+		Sent     float64 `json:"SentBytes"`
+	}
+
+	var nics []nicStats
+	err := win.extractStats(cmd, &nics)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, nic := range nics {
+		adapter := map[string]float64{}
+		adapter["sent"] = nic.Sent
+		adapter["received"] = nic.Received
+		ret[nic.Name] = adapter
+	}
+	return ret, nil
+}
+
+func (win WinServer) extractStats(cmd string, stats interface{}) error {
+	output, err := win.runCmd(cmd)
+	if err != nil {
+		return err
+	}
+
+	if strings.HasPrefix(output, "{") {
+		output = "[" + output + "]"
+	}
+
+	err = json.Unmarshal([]byte(output), &stats)
+	if err != nil {
+		log.Errorf("Fail to extract stats %s with error %s", output, err)
+		return err
+	}
+	return nil
 }
 
 // Only powershell command is supported
