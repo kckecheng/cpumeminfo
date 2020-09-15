@@ -50,8 +50,8 @@ func NewWinServer(host string, user, password string, port int) (*WinServer, err
 }
 
 // GetCPUUsage implement interface
-func (win WinServer) GetCPUUsage() ([]float32, error) {
-	var ret []float32
+func (win WinServer) GetCPUUsage() ([]float64, error) {
+	var ret []float64
 	var err error
 
 	cpups := "(Get-WmiObject win32_processor | Select-Object -Property LoadPercentage | ConvertTo-Json).ToString()"
@@ -62,7 +62,7 @@ func (win WinServer) GetCPUUsage() ([]float32, error) {
 	}
 
 	// negative return implies invalid input
-	extractLoad := func(cpu map[string]float32) (float32, error) {
+	extractLoad := func(cpu map[string]float64) (float64, error) {
 		load, exists := cpu["LoadPercentage"]
 		if exists {
 			return load, nil
@@ -71,7 +71,7 @@ func (win WinServer) GetCPUUsage() ([]float32, error) {
 	}
 
 	if strings.HasPrefix(output, "[") {
-		var cpus []map[string]float32
+		var cpus []map[string]float64
 		err = json.Unmarshal([]byte(output), &cpus)
 		if err != nil {
 			log.Errorf("Fail to decode CPU stats %s with error %s", output, err)
@@ -88,7 +88,7 @@ func (win WinServer) GetCPUUsage() ([]float32, error) {
 		}
 		return ret, nil
 	} else if strings.HasPrefix(output, "{") {
-		var cpu map[string]float32
+		var cpu map[string]float64
 		err = json.Unmarshal([]byte(output), &cpu)
 		if err != nil {
 			log.Errorf("Fail to decode CPU stats %s with error %s", output, err)
@@ -109,7 +109,7 @@ func (win WinServer) GetCPUUsage() ([]float32, error) {
 }
 
 // GetMemUsage implement interface
-func (win WinServer) GetMemUsage() (float32, error) {
+func (win WinServer) GetMemUsage() (float64, error) {
 	memps := "Get-WmiObject win32_OperatingSystem | Select-Object -Property FreePhysicalMemory,TotalVisibleMemorySize | ConvertTo-Json"
 	log.Infof("Run command %s to get memory stats", memps)
 	output, err := win.runCmd(memps)
@@ -117,7 +117,7 @@ func (win WinServer) GetMemUsage() (float32, error) {
 		return 0, err
 	}
 
-	var memory map[string]float32
+	var memory map[string]float64
 	err = json.Unmarshal([]byte(output), &memory)
 	if err != nil {
 		log.Errorf("Fail to decode memory stats %s with error %s", output, err)
@@ -139,6 +139,54 @@ func (win WinServer) GetMemUsage() (float32, error) {
 	}
 
 	return 1 - free/total, nil
+}
+
+// GetLocalDiskUsage implement interface
+func (win WinServer) GetLocalDiskUsage() (map[string]float64, error) {
+	ret := map[string]float64{}
+
+	ldiskps := "(Get-WmiObject -Class Win32_logicaldisk -Filter DriveType=3 | Select-Object -Property DeviceID,FreeSpace,Size | ConvertTo-Json).ToString()"
+	log.Infof("Run command %s to get local disk stats", ldiskps)
+	output, err := win.runCmd(ldiskps)
+	if err != nil {
+		return nil, err
+	}
+
+	type diskStats struct {
+		DeviceID  string  `json:"DeviceID"`
+		FreeSpace float64 `json:"FreeSpace"`
+		Size      float64 `json:"Size"`
+	}
+
+	if strings.HasPrefix(output, "[") {
+		var disks []diskStats
+		err = json.Unmarshal([]byte(output), &disks)
+		if err != nil {
+			log.Errorf("Fail to decode disk stats %s with error %s", output, err)
+			return nil, err
+		}
+
+		for _, disk := range disks {
+			did := strings.TrimRight(disk.DeviceID, ":")
+			ret[did] = (disk.Size - disk.FreeSpace) / disk.Size
+		}
+		return ret, nil
+	} else if strings.HasPrefix(output, "{") {
+		var disk diskStats
+		err = json.Unmarshal([]byte(output), &disk)
+		if err != nil {
+			log.Errorf("Fail to decode disk stats %s with error %s", output, err)
+			return nil, err
+		}
+
+		did := strings.TrimRight(disk.DeviceID, ":")
+		ret[did] = (disk.Size - disk.FreeSpace) / disk.Size
+		return ret, nil
+	}
+
+	err = fmt.Errorf("The command output %s is not a valid json string", output)
+	log.Error(err)
+	return nil, err
 }
 
 // Only powershell command is supported

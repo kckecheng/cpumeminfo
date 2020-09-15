@@ -39,4 +39,10 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("Memory usage: %+v\n", musage)
+
+	dusage, err := p.GetLocalDiskUsage()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Local disk usage: %+v\n", dusage)
 }
