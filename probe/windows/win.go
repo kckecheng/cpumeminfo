@@ -14,6 +14,7 @@ Prequisites: refer to https://github.com/masterzen/winrm
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"strings"
 
@@ -29,28 +30,34 @@ type WinServer struct {
 }
 
 // NewWinServer init a Windows connection
-func NewWinServer(host string, user, password string, port int) (*WinServer, error) {
+func NewWinServer(host, user, password string, port int) (*WinServer, error) {
+	s := probe.Server{
+		Host:     host,
+		User:     user,
+		Password: password,
+		Port:     port,
+	}
+	if !s.Valid() {
+		return nil, errors.New("Inputs are not valid, please check")
+	}
+
 	endpoint := winrm.NewEndpoint(host, port, false, false, nil, nil, nil, 0)
 	client, err := winrm.NewClient(endpoint, user, password)
 	if err != nil {
-		log.Errorf("Fail to create Windows connection for %s", host)
+		log.Errorf("Fail to create client for %+v due to %s", s, err)
 		return nil, err
 	}
+
 	serv := WinServer{
-		Server: probe.Server{
-			Host:     host,
-			User:     user,
-			Password: password,
-			Port:     port,
-		},
+		Server: s,
 		client: client,
 	}
 	return &serv, nil
 }
 
 // GetCPUUsage implement interface
-func (win WinServer) GetCPUUsage() (map[string]float64, error) {
-	ret := map[string]float64{}
+func (win WinServer) GetCPUUsage() (float64, error) {
+	var ret float64
 
 	cmd := "(Get-WmiObject win32_processor | Select-Object -Property DeviceID,LoadPercentage | ConvertTo-Json).ToString()"
 
@@ -65,9 +72,11 @@ func (win WinServer) GetCPUUsage() (map[string]float64, error) {
 		return ret, err
 	}
 
+	var total float64
 	for _, cpu := range cpus {
-		ret[cpu.ID] = cpu.Load
+		total += cpu.Load
 	}
+	ret = total / float64(len(cpus))
 	return ret, nil
 }
 
@@ -87,7 +96,7 @@ func (win WinServer) GetMemUsage() (float64, error) {
 	if err != nil {
 		return ret, err
 	}
-	return 1 - mems[0].Free/mems[0].Total, nil
+	return (1 - mems[0].Free/mems[0].Total) * 100, nil
 }
 
 // GetLocalDiskUsage implement interface
@@ -110,7 +119,7 @@ func (win WinServer) GetLocalDiskUsage() (map[string]float64, error) {
 
 	for _, disk := range disks {
 		did := strings.TrimRight(disk.DeviceID, ":")
-		ret[did] = (disk.Size - disk.FreeSpace) / disk.Size
+		ret[did] = ((disk.Size - disk.FreeSpace) / disk.Size) * 100
 	}
 	return ret, nil
 }
