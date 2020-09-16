@@ -6,4 +6,5 @@ require (
 	github.com/masterzen/winrm v0.0.0-20200910070334-9a59535f8f2a
 	github.com/sirupsen/logrus v1.6.0
 	github.com/vmware/govmomi v0.23.1
+	golang.org/x/crypto v0.0.0-20190222235706-ffb98f73852f
 )

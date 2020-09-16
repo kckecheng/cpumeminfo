@@ -173,7 +173,7 @@ func (win WinServer) extractStats(cmd string, stats interface{}) error {
 
 // Only powershell command is supported
 func (win WinServer) runCmd(cmd string) (string, error) {
-	log.Infof("Execute command %s", cmd)
+	log.Debugf("Execute command %s", cmd)
 
 	var buf bytes.Buffer
 	_, err := win.client.Run(winrm.Powershell(cmd), &buf, ioutil.Discard)
