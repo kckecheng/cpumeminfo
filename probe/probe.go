@@ -1,7 +1,14 @@
 package probe
 
+import (
+	"bytes"
+	"os/exec"
+	"strings"
+)
+
 // Probe interface
 type Probe interface {
+	Online() bool
 	GetCPUUsage() (float64, error)
 	GetMemUsage() (float64, error)
 	GetLocalDiskUsage() (map[string]float64, error)
@@ -19,6 +26,23 @@ type Server struct {
 // Valid make sure all fields are valid
 func (s Server) Valid() bool {
 	if s.Host == "" || s.User == "" || s.Password == "" || s.Port <= 0 || s.Port > 65535 {
+		return false
+	}
+	return true
+}
+
+// Online check if a server is reachable
+func (s Server) Online() bool {
+	var out bytes.Buffer
+	cmd := exec.Command("ping", "-W", "1", "-c", "3", s.Host)
+	cmd.Stdout = &out
+
+	err := cmd.Run()
+	if err != nil {
+		return false
+	}
+
+	if strings.Contains(out.String(), "100% packet loss") {
 		return false
 	}
 	return true

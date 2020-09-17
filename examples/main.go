@@ -32,52 +32,62 @@ func main() {
 		Type     string `json:"type"`
 	}
 
-	var cfg config
-	err = json.Unmarshal(jbytes, &cfg)
+	var hostCfgs []config
+	err = json.Unmarshal(jbytes, &hostCfgs)
 	if err != nil {
 		log.Fatal("Fail to decode json", err)
 	}
 
-	var p probe.Probe
-	switch t := cfg.Type; t {
-	case "windows":
-		p, err = windows.NewWinServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
-	case "esxi":
-		p, err = vmware.NewVMWServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
-	case "linux":
-		p, err = linux.NewLinServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
-	default:
-		log.Fatal("Not a supported operating system")
-	}
-	if err != nil {
-		log.Fatal("Fail to initial object", cfg, err)
-	}
+	for _, cfg := range hostCfgs {
+		var p probe.Probe
+		switch t := cfg.Type; t {
+		case "windows":
+			p, err = windows.NewWinServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
+		case "esxi":
+			p, err = vmware.NewVMWServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
+		case "linux":
+			p, err = linux.NewLinServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
+		default:
+			log.Fatal("Not a supported operating system")
+		}
+		if err != nil {
+			log.Fatal("Fail to initial object", cfg, err)
+		}
 
-	cusage, err := p.GetCPUUsage()
-	if err != nil {
-		log.Error(err)
-	} else {
-		fmt.Printf("CPU usage: %+v\n", cusage)
-	}
+		online := p.Online()
+		if online {
+			fmt.Println("Server is online")
+		} else {
+			fmt.Println("Server is not online")
+			return
+		}
 
-	musage, err := p.GetMemUsage()
-	if err != nil {
-		log.Error(err)
-	} else {
-		fmt.Printf("Memory usage: %+v\n", musage)
-	}
+		cusage, err := p.GetCPUUsage()
+		if err != nil {
+			log.Error(err)
+		} else {
+			fmt.Printf("CPU usage: %+v\n", cusage)
+		}
 
-	dusage, err := p.GetLocalDiskUsage()
-	if err != nil {
-		log.Error(err)
-	} else {
-		fmt.Printf("Local disk usage: %+v\n", dusage)
-	}
+		musage, err := p.GetMemUsage()
+		if err != nil {
+			log.Error(err)
+		} else {
+			fmt.Printf("Memory usage: %+v\n", musage)
+		}
 
-	nusage, err := p.GetNICUsage()
-	if err != nil {
-		log.Error(err)
-	} else {
-		fmt.Printf("NIC usage: %+v\n", nusage)
+		dusage, err := p.GetLocalDiskUsage()
+		if err != nil {
+			log.Error(err)
+		} else {
+			fmt.Printf("Local disk usage: %+v\n", dusage)
+		}
+
+		nusage, err := p.GetNICUsage()
+		if err != nil {
+			log.Error(err)
+		} else {
+			fmt.Printf("NIC usage: %+v\n", nusage)
+		}
 	}
 }

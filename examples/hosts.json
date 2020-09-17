@@ -1,0 +1,22 @@
+[{
+    "host": "192.168.10.11",
+    "user": "root",
+    "password": "password",
+    "port": 443,
+    "type": "esxi"
+  },
+  {
+    "host": "192.168.10.12",
+    "user": "root",
+    "password": "password",
+    "port": 22,
+    "type": "linux"
+  },
+  {
+    "host": "192.168.10.13",
+    "user": "Administrator",
+    "password": "password",
+    "port": 5985,
+    "type": "windows"
+  }
+]
