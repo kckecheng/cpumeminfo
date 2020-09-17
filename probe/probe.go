@@ -21,6 +21,7 @@ type Server struct {
 	User     string `json:"user"`
 	Password string `json:"password"`
 	Port     int    `json:"port"`
+	Type     string `json:"type"` // linux, windows, or esxi
 }
 
 // Valid make sure all fields are valid
@@ -28,7 +29,12 @@ func (s Server) Valid() bool {
 	if s.Host == "" || s.User == "" || s.Password == "" || s.Port <= 0 || s.Port > 65535 {
 		return false
 	}
-	return true
+
+	switch s.Type {
+	case "linux", "windows", "esxi":
+		return true
+	}
+	return false
 }
 
 // Online check if a server is reachable

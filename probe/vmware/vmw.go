@@ -33,6 +33,7 @@ func NewVMWServer(host, user, password string, port int) (*VMWServer, error) {
 		User:     user,
 		Password: password,
 		Port:     port,
+		Type:     "esxi",
 	}
 	if !s.Valid() {
 		return nil, errors.New("Inputs are not valid, please check")

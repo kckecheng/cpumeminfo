@@ -25,6 +25,7 @@ func NewLinServer(host, user, password string, port int) (*LinServer, error) {
 		User:     user,
 		Password: password,
 		Port:     port,
+		Type:     "linux",
 	}
 	if !s.Valid() {
 		return nil, errors.New("Inputs are not valid, please check")

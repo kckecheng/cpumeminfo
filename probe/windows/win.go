@@ -36,6 +36,7 @@ func NewWinServer(host, user, password string, port int) (*WinServer, error) {
 		User:     user,
 		Password: password,
 		Port:     port,
+		Type:     "windows",
 	}
 	if !s.Valid() {
 		return nil, errors.New("Inputs are not valid, please check")

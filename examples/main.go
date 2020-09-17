@@ -24,34 +24,26 @@ func main() {
 		panic(err)
 	}
 
-	type config struct {
-		Host     string `json:"host"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		Port     int    `json:"port"`
-		Type     string `json:"type"`
-	}
-
-	var hostCfgs []config
-	err = json.Unmarshal(jbytes, &hostCfgs)
+	var servers []probe.Server
+	err = json.Unmarshal(jbytes, &servers)
 	if err != nil {
 		log.Fatal("Fail to decode json", err)
 	}
 
-	for _, cfg := range hostCfgs {
+	for _, server := range servers {
 		var p probe.Probe
-		switch t := cfg.Type; t {
+		switch t := server.Type; t {
 		case "windows":
-			p, err = windows.NewWinServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
+			p, err = windows.NewWinServer(server.Host, server.User, server.Password, server.Port)
 		case "esxi":
-			p, err = vmware.NewVMWServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
+			p, err = vmware.NewVMWServer(server.Host, server.User, server.Password, server.Port)
 		case "linux":
-			p, err = linux.NewLinServer(cfg.Host, cfg.User, cfg.Password, cfg.Port)
+			p, err = linux.NewLinServer(server.Host, server.User, server.Password, server.Port)
 		default:
 			log.Fatal("Not a supported operating system")
 		}
 		if err != nil {
-			log.Fatal("Fail to initial object", cfg, err)
+			log.Fatal("Fail to initial object", server, err)
 		}
 
 		online := p.Online()
