@@ -9,4 +9,5 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/vmware/govmomi v0.23.1
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
+	golang.org/x/text v0.3.2 // indirect
 )

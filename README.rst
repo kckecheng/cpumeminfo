@@ -1,7 +1,7 @@
 About
 =======
 
-Probe Linux, Windows, and ESXi to get their CPU and memory usage.
+Probe Linux, Windows, and ESXi for CPU and memory utilization, and push the results to a Pushgateway.
 
 Prerequisites
 --------------
@@ -21,3 +21,11 @@ Prerequisites
       winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="1024"}'
 
 - ESXi: Configure a valid password for access.
+
+Usage
+------
+
+::
+
+  go build .
+  ./osprobe -h

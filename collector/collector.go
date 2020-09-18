@@ -39,9 +39,9 @@ var descs = map[string]*prometheus.Desc{
 
 // SrvCollector prometheus collector
 type SrvCollector struct {
-	servers []probe.Server
-	stat    map[string]map[string]float64
-	mutex   sync.Mutex
+	Servers []probe.Server
+	Stat    map[string]map[string]float64
+	Mutex   sync.Mutex
 }
 
 // NewSrvCollector init collector
@@ -56,11 +56,16 @@ func NewSrvCollector(path string) *SrvCollector {
 	if err != nil {
 		log.Fatal("Fail to decode json", err)
 	}
+	for _, server := range servers {
+		if server.Type != "linux" && server.Type != "windows" && server.Type != "esxi" {
+			log.Fatalf("Server type %s is not supported, please check the configuration", server.Type)
+		}
+	}
 
 	collector := SrvCollector{
-		servers: servers,
-		stat:    map[string]map[string]float64{},
-		mutex:   sync.Mutex{},
+		Servers: servers,
+		Stat:    map[string]map[string]float64{},
+		Mutex:   sync.Mutex{},
 	}
 	return &collector
 }
@@ -74,11 +79,11 @@ func (sc *SrvCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect implement prometheus collector required interface
 func (sc *SrvCollector) Collect(ch chan<- prometheus.Metric) {
-	sc.mutex.Lock()
-	defer sc.mutex.Unlock()
+	sc.Mutex.Lock()
+	defer sc.Mutex.Unlock()
 
 	descKeys := []string{"online", "accessible", "cpu_utilization", "mem_utilization"}
-	for k, v := range sc.stat {
+	for k, v := range sc.Stat {
 		target := sc.findSrv(k)
 
 		for _, dk := range descKeys {
@@ -94,7 +99,7 @@ func (sc *SrvCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (sc *SrvCollector) findSrv(host string) probe.Server {
-	for _, s := range sc.servers {
+	for _, s := range sc.Servers {
 		if s.Host == host {
 			return s
 		}
