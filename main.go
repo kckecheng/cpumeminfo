@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -20,12 +21,20 @@ import (
 )
 
 // INTERVAL update interval
-const INTERVAL time.Duration = 10
+var INTERVAL time.Duration = 3600
 
 func init() {
 	// log.SetLevel(log.DebugLevel)
 	// log.SetLevel(log.InfoLevel)
-	log.Infof("Results will be updated every %d seconds", INTERVAL)
+
+	w, ok := os.LookupEnv("PROBE_INTERVAL")
+	if ok {
+		v, e := strconv.ParseInt(w, 10, 64)
+		if e == nil {
+			INTERVAL = time.Duration(v)
+		}
+	}
+	log.Infof("Results will be updated every %d seconds, this can be changed by 'export PROBE_INTERVAL=xxxx'", INTERVAL)
 }
 
 func deleteJob(pusher *push.Pusher, gateway, job string) {
