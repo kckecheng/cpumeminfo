@@ -18,25 +18,28 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 )
 
-// VMWServer vCenter/ESXi
-type VMWServer struct {
+// Server vCenter/ESXi
+type Server struct {
 	probe.Server
 	client *vim25.Client
 }
 
 var esxiHosts []mo.HostSystem
 
-// NewVMWServer init
-func NewVMWServer(host, user, password string, port int) (*VMWServer, error) {
-	s := probe.Server{
-		Host:     host,
-		User:     user,
-		Password: password,
-		Port:     port,
-		Type:     "esxi",
+// NewServer init
+func NewServer(host, user, password string, port int) (Server, error) {
+	server := Server{
+		Server: probe.Server{
+			Host:     host,
+			User:     user,
+			Password: password,
+			Port:     port,
+			Type:     "esxi",
+		},
 	}
-	if !s.Valid() {
-		return nil, errors.New("Inputs are not valid, please check")
+
+	if !server.Valid() {
+		return server, errors.New("Inputs are not valid, please check")
 	}
 
 	u := url.URL{
@@ -49,19 +52,16 @@ func NewVMWServer(host, user, password string, port int) (*VMWServer, error) {
 	ctx := context.Background()
 	c, err := govmomi.NewClient(ctx, &u, true)
 	if err != nil {
-		log.Errorf("Fail to create client for %+v", s)
-		return nil, err
+		log.Errorf("Fail to create client for %+v", server.Server)
+		return server, err
 	}
 
-	serv := VMWServer{
-		Server: s,
-		client: c.Client,
-	}
-	return &serv, nil
+	server.client = c.Client
+	return server, nil
 }
 
 // GetCPUUsage implement interface
-func (vmw VMWServer) GetCPUUsage() (float64, error) {
+func (vmw Server) GetCPUUsage() (float64, error) {
 	var err error
 	if esxiHosts == nil || len(esxiHosts) == 0 {
 		esxiHosts, err = vmw.getHostMor()
@@ -81,7 +81,7 @@ func (vmw VMWServer) GetCPUUsage() (float64, error) {
 }
 
 // GetMemUsage implement interface
-func (vmw VMWServer) GetMemUsage() (float64, error) {
+func (vmw Server) GetMemUsage() (float64, error) {
 	var err error
 	if esxiHosts == nil || len(esxiHosts) == 0 {
 		esxiHosts, err = vmw.getHostMor()
@@ -100,16 +100,16 @@ func (vmw VMWServer) GetMemUsage() (float64, error) {
 }
 
 // GetNICUsage implement interface
-func (vmw VMWServer) GetNICUsage() (map[string]map[string]float64, error) {
+func (vmw Server) GetNICUsage() (map[string]map[string]float64, error) {
 	return nil, errors.New("Not implemented")
 }
 
 // GetLocalDiskUsage implement interface
-func (vmw VMWServer) GetLocalDiskUsage() (map[string]float64, error) {
+func (vmw Server) GetLocalDiskUsage() (map[string]float64, error) {
 	return nil, errors.New("Not implemented")
 }
 
-func (vmw VMWServer) getHostMor() ([]mo.HostSystem, error) {
+func (vmw Server) getHostMor() ([]mo.HostSystem, error) {
 	c := vmw.client
 	m := view.NewManager(c)
 

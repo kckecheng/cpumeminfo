@@ -123,11 +123,11 @@ func main() {
 						var err error
 						switch t := server.Type; t {
 						case "linux":
-							p, err = linux.NewLinServer(server.Host, server.User, server.Password, server.Port)
+							p, err = linux.NewServer(server.Host, server.User, server.Password, server.Port)
 						case "windows":
-							p, err = windows.NewWinServer(server.Host, server.User, server.Password, server.Port)
+							p, err = windows.NewServer(server.Host, server.User, server.Password, server.Port)
 						case "esxi":
-							p, err = vmware.NewVMWServer(server.Host, server.User, server.Password, server.Port)
+							p, err = vmware.NewServer(server.Host, server.User, server.Password, server.Port)
 						}
 
 						if err != nil {

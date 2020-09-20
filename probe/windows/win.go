@@ -23,41 +23,40 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// WinServer Windows object
-type WinServer struct {
+// Server Windows object
+type Server struct {
 	probe.Server
 	client *winrm.Client
 }
 
-// NewWinServer init a Windows connection
-func NewWinServer(host, user, password string, port int) (*WinServer, error) {
-	s := probe.Server{
-		Host:     host,
-		User:     user,
-		Password: password,
-		Port:     port,
-		Type:     "windows",
+// NewServer init a Windows connection
+func NewServer(host, user, password string, port int) (Server, error) {
+	server := Server{
+		Server: probe.Server{
+			Host:     host,
+			User:     user,
+			Password: password,
+			Port:     port,
+			Type:     "esxi",
+		},
 	}
-	if !s.Valid() {
-		return nil, errors.New("Inputs are not valid, please check")
+	if !server.Valid() {
+		return server, errors.New("Inputs are not valid, please check")
 	}
 
 	endpoint := winrm.NewEndpoint(host, port, false, false, nil, nil, nil, 0)
 	client, err := winrm.NewClient(endpoint, user, password)
 	if err != nil {
-		log.Errorf("Fail to create client for %+v due to %s", s, err)
-		return nil, err
+		log.Errorf("Fail to create client for %+v due to %s", server.Server, err)
+		return server, err
 	}
 
-	serv := WinServer{
-		Server: s,
-		client: client,
-	}
-	return &serv, nil
+	server.client = client
+	return server, nil
 }
 
 // GetCPUUsage implement interface
-func (win WinServer) GetCPUUsage() (float64, error) {
+func (win Server) GetCPUUsage() (float64, error) {
 	var ret float64
 
 	cmd := "(Get-WmiObject win32_processor | Select-Object -Property DeviceID,LoadPercentage | ConvertTo-Json).ToString()"
@@ -82,7 +81,7 @@ func (win WinServer) GetCPUUsage() (float64, error) {
 }
 
 // GetMemUsage implement interface
-func (win WinServer) GetMemUsage() (float64, error) {
+func (win Server) GetMemUsage() (float64, error) {
 	var ret float64
 
 	cmd := "Get-WmiObject win32_OperatingSystem | Select-Object -Property FreePhysicalMemory,TotalVisibleMemorySize | ConvertTo-Json"
@@ -101,7 +100,7 @@ func (win WinServer) GetMemUsage() (float64, error) {
 }
 
 // GetLocalDiskUsage implement interface
-func (win WinServer) GetLocalDiskUsage() (map[string]float64, error) {
+func (win Server) GetLocalDiskUsage() (map[string]float64, error) {
 	ret := map[string]float64{}
 
 	cmd := "(Get-WmiObject -Class Win32_logicaldisk -Filter DriveType=3 | Select-Object -Property DeviceID,FreeSpace,Size | ConvertTo-Json).ToString()"
@@ -126,7 +125,7 @@ func (win WinServer) GetLocalDiskUsage() (map[string]float64, error) {
 }
 
 // GetNICUsage implement interface
-func (win WinServer) GetNICUsage() (map[string]map[string]float64, error) {
+func (win Server) GetNICUsage() (map[string]map[string]float64, error) {
 	ret := map[string]map[string]float64{}
 
 	cmd := "(Get-NetAdapterStatistics | Select-Object -Property Name,ReceivedBytes,SentBytes | ConvertTo-Json).ToString()"
@@ -152,7 +151,7 @@ func (win WinServer) GetNICUsage() (map[string]map[string]float64, error) {
 	return ret, nil
 }
 
-func (win WinServer) extractStats(cmd string, stats interface{}) error {
+func (win Server) extractStats(cmd string, stats interface{}) error {
 	output, err := win.runCmd(cmd)
 	if err != nil {
 		return err
@@ -173,7 +172,7 @@ func (win WinServer) extractStats(cmd string, stats interface{}) error {
 }
 
 // Only powershell command is supported
-func (win WinServer) runCmd(cmd string) (string, error) {
+func (win Server) runCmd(cmd string) (string, error) {
 	log.Debugf("Execute command %s", cmd)
 
 	var buf bytes.Buffer

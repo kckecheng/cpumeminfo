@@ -12,23 +12,25 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// LinServer Linux server
-type LinServer struct {
+// Server Linux server
+type Server struct {
 	probe.Server
 	client *ssh.Client
 }
 
-// NewLinServer init
-func NewLinServer(host, user, password string, port int) (*LinServer, error) {
-	s := probe.Server{
-		Host:     host,
-		User:     user,
-		Password: password,
-		Port:     port,
-		Type:     "linux",
+// NewServer init
+func NewServer(host, user, password string, port int) (Server, error) {
+	server := Server{
+		Server: probe.Server{
+			Host:     host,
+			User:     user,
+			Password: password,
+			Port:     port,
+			Type:     "esxi",
+		},
 	}
-	if !s.Valid() {
-		return nil, errors.New("Inputs are not valid, please check")
+	if !server.Valid() {
+		return server, errors.New("Inputs are not valid, please check")
 	}
 
 	config := &ssh.ClientConfig{
@@ -41,18 +43,15 @@ func NewLinServer(host, user, password string, port int) (*LinServer, error) {
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", host, port), config)
 	if err != nil {
 		log.Errorf("Fail to establish ssh connection to %s due to %s", host, err)
-		return nil, err
+		return server, err
 	}
 
-	server := LinServer{
-		Server: s,
-		client: client,
-	}
-	return &server, nil
+	server.client = client
+	return server, nil
 }
 
 // GetCPUUsage implement interface
-func (lin LinServer) GetCPUUsage() (float64, error) {
+func (lin Server) GetCPUUsage() (float64, error) {
 	cmd := "head -n1 /proc/stat"
 
 	output, err := lin.run(cmd)
@@ -74,7 +73,7 @@ func (lin LinServer) GetCPUUsage() (float64, error) {
 }
 
 // GetMemUsage implement interface
-func (lin LinServer) GetMemUsage() (float64, error) {
+func (lin Server) GetMemUsage() (float64, error) {
 	cmd := "head -n2 /proc/meminfo"
 
 	output, err := lin.run(cmd)
@@ -91,16 +90,16 @@ func (lin LinServer) GetMemUsage() (float64, error) {
 }
 
 // GetLocalDiskUsage implement interface
-func (lin LinServer) GetLocalDiskUsage() (map[string]float64, error) {
+func (lin Server) GetLocalDiskUsage() (map[string]float64, error) {
 	return nil, errors.New("Not implemented")
 }
 
 // GetNICUsage implement interface
-func (lin LinServer) GetNICUsage() (map[string]map[string]float64, error) {
+func (lin Server) GetNICUsage() (map[string]map[string]float64, error) {
 	return nil, errors.New("Not implemented")
 }
 
-func (lin LinServer) run(cmd string) (string, error) {
+func (lin Server) run(cmd string) (string, error) {
 	session, err := lin.client.NewSession()
 	if err != nil {
 		log.Error("Fail to create session", err)
