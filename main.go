@@ -51,7 +51,7 @@ func main() {
 	var job, gateway, cfg string
 	flag.StringVarP(&job, "job", "j", "osprobe", "Pushgateway job name")
 	flag.StringVarP(&gateway, "gateway", "g", "http://127.0.0.1:9091", "Pushgateway URL")
-	flag.StringVarP(&cfg, "config", "c", "hosts.json", "Host definitions")
+	flag.StringVarP(&cfg, "config", "c", "servers.json", "Server definitions")
 
 	flag.Parse()
 	if job == "" || gateway == "" || cfg == "" {
