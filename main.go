@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -61,7 +62,7 @@ func main() {
 	log.Infof("Probe results will be pushed to %s with job %s", gateway, job)
 
 	// Collector init and register
-	sc := collector.NewSrvCollector(cfg)
+	sc := collector.NewServerCollector(cfg)
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(sc)
 
@@ -128,6 +129,8 @@ func main() {
 							p, err = windows.NewServer(server.Host, server.User, server.Password, server.Port)
 						case "esxi":
 							p, err = vmware.NewServer(server.Host, server.User, server.Password, server.Port)
+						default:
+							err = errors.New("Unsupported operating system")
 						}
 
 						if err != nil {

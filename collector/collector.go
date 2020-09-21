@@ -37,15 +37,15 @@ var descs = map[string]*prometheus.Desc{
 	),
 }
 
-// SrvCollector prometheus collector
-type SrvCollector struct {
+// ServerCollector prometheus collector
+type ServerCollector struct {
 	Servers []probe.Server
 	Stat    map[string]map[string]float64
 	Mutex   sync.Mutex
 }
 
-// NewSrvCollector init collector
-func NewSrvCollector(path string) *SrvCollector {
+// NewServerCollector init collector
+func NewServerCollector(path string) *ServerCollector {
 	contents, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Fatalf("Fail to read file %s due to %s", path, err)
@@ -58,11 +58,12 @@ func NewSrvCollector(path string) *SrvCollector {
 	}
 	for _, server := range servers {
 		if server.Type != "linux" && server.Type != "windows" && server.Type != "esxi" {
-			log.Fatalf("Server type %s is not supported, please check the configuration", server.Type)
+			// log.Fatalf("Server type %s is not supported, please check the configuration", server.Type)
+			log.Errorf("Server type %s is not supported (%s), please check the configuration", server.Type, server.Host)
 		}
 	}
 
-	collector := SrvCollector{
+	collector := ServerCollector{
 		Servers: servers,
 		Stat:    map[string]map[string]float64{},
 		Mutex:   sync.Mutex{},
@@ -71,20 +72,20 @@ func NewSrvCollector(path string) *SrvCollector {
 }
 
 // Describe implement prometheus collector required interface
-func (sc *SrvCollector) Describe(ch chan<- *prometheus.Desc) {
+func (sc *ServerCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, v := range descs {
 		ch <- v
 	}
 }
 
 // Collect implement prometheus collector required interface
-func (sc *SrvCollector) Collect(ch chan<- prometheus.Metric) {
+func (sc *ServerCollector) Collect(ch chan<- prometheus.Metric) {
 	sc.Mutex.Lock()
 	defer sc.Mutex.Unlock()
 
 	descKeys := []string{"online", "accessible", "cpu_utilization", "mem_utilization"}
 	for k, v := range sc.Stat {
-		target := sc.findSrv(k)
+		target := sc.findServer(k)
 
 		for _, dk := range descKeys {
 			ch <- prometheus.MustNewConstMetric(
@@ -98,7 +99,7 @@ func (sc *SrvCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (sc *SrvCollector) findSrv(host string) probe.Server {
+func (sc *ServerCollector) findServer(host string) probe.Server {
 	for _, s := range sc.Servers {
 		if s.Host == host {
 			return s
