@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: osprobe-configmap
+data:
+  config: |
+    [
+      {
+        "host": "192.168.68.231",
+        "user": "root",
+        "password": "password",
+        "port": 443,
+        "type": "esxi"
+      },
+      {
+        "host": "192.168.68.185",
+        "user": "auto",
+        "password": "password",
+        "port": 22,
+        "type": "linux"
+      },
+      {
+        "host": "192.168.68.205",
+        "user": "Administrator",
+        "password": "password",
+        "port": 5985,
+        "type": "windows"
+      }
+    ]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: osprobe-deployment
+spec:
+  selector:
+    matchLabels:
+      app: osprobe
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: osprobe
+    spec:
+      containers:
+      - name: osprobe
+        image: quay.io/kckecheng/osprobe
+        env:
+          - name: OSPROBE_GATEWAY
+            value: "http://pushgateway:9091"
+          - name: OSPROBE_JOB
+            value: "osprobe"
+          - name: OSPROBE_INTERVAL
+            value: "3600"
+          - name: OSPROBE_CONFIG
+            value: "/etc/osprobe/servers.json"
+        volumeMounts:
+          - name: configvol
+            mountPath: /etc/osprobe
+      volumes:
+        - name: configvol
+          configMap:
+            name: osprobe-configmap
+            items:
+              - key: config
+                path: servers.json
