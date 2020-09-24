@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -21,21 +22,12 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-// INTERVAL update interval
-var INTERVAL time.Duration = 3600
-
-func init() {
-	// log.SetLevel(log.DebugLevel)
-	// log.SetLevel(log.InfoLevel)
-
-	w, ok := os.LookupEnv("PROBE_INTERVAL")
-	if ok {
-		v, e := strconv.ParseInt(w, 10, 64)
-		if e == nil {
-			INTERVAL = time.Duration(v)
-		}
+func getEnvVar(name string) string {
+	v, b := os.LookupEnv(name)
+	if !b {
+		return ""
 	}
-	log.Infof("Results will be updated every %d seconds, this can be changed by 'export PROBE_INTERVAL=xxxx'", INTERVAL)
+	return strings.TrimSpace(v)
 }
 
 func deleteJob(pusher *push.Pusher, gateway, job string) {
@@ -47,19 +39,129 @@ func deleteJob(pusher *push.Pusher, gateway, job string) {
 	}
 }
 
+func refreshMetrics(sc *collector.ServerCollector, interval int64, pdone chan int) {
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		// Periodical probe over servers
+		select {
+		case <-ticker.C:
+			var wg sync.WaitGroup
+			for _, server := range sc.Servers {
+				wg.Add(1)
+				go func(server probe.Server) {
+					log.Debug("Probe serve:", server.Host)
+					defer wg.Done()
+
+					// Initial stat for each server
+					stat := map[string]float64{
+						"online":          0,
+						"accessible":      0,
+						"cpu_utilization": 0,
+						"mem_utilization": 0,
+					}
+
+					online := server.Online()
+					if !online {
+						log.Errorf("Server %s is offline", server.Host)
+						sc.Mutex.Lock()
+						sc.Stat[server.Host] = stat
+						sc.Mutex.Unlock()
+						return
+					}
+					stat["online"] = 1
+
+					log.Debug("Create connection to server:", server.Host)
+					var p probe.Probe
+					var err error
+					switch t := server.Type; t {
+					case "linux":
+						p, err = linux.NewServer(server.Host, server.User, server.Password, server.Port)
+					case "windows":
+						p, err = windows.NewServer(server.Host, server.User, server.Password, server.Port)
+					case "esxi":
+						p, err = vmware.NewServer(server.Host, server.User, server.Password, server.Port)
+					default:
+						err = errors.New("Unsupported operating system")
+					}
+
+					if err != nil {
+						log.Error("Fail to connect to server:", server.Host)
+						sc.Mutex.Lock()
+						sc.Stat[server.Host] = stat
+						sc.Mutex.Unlock()
+						return
+					}
+					stat["accessible"] = 1
+
+					log.Debug("Gather CPU usage for server:", server.Host)
+					cpuUsage, err := p.GetCPUUsage()
+					if err != nil {
+						log.Error("Fail to probe CPU usage", err)
+					} else {
+						stat["cpu_utilization"] = cpuUsage
+					}
+
+					log.Debug("Gather memory usage for server:", server.Host)
+					memUsage, err := p.GetMemUsage()
+					if err != nil {
+						log.Error("Fail to probe memory usage", err)
+					} else {
+						stat["mem_utilization"] = memUsage
+					}
+
+					log.Debug("Update latest stat for server:", server.Host)
+					sc.Mutex.Lock()
+					sc.Stat[server.Host] = stat
+					sc.Mutex.Unlock()
+				}(server)
+			}
+			wg.Wait()
+			// Complete one round of collection
+			pdone <- 1
+		}
+	}
+}
+
 func main() {
 	// Parse arguments
 	var job, gateway, cfg string
-	flag.StringVarP(&job, "job", "j", "osprobe", "Pushgateway job name")
-	flag.StringVarP(&gateway, "gateway", "g", "http://127.0.0.1:9091", "Pushgateway URL")
-	flag.StringVarP(&cfg, "config", "c", "servers.json", "Server definitions")
-
+	var interval int64
+	flag.StringVarP(&job, "job", "j", "osprobe", "Pushgateway job name, can be overwritten by setting OSPROBE_JOB")
+	flag.StringVarP(&gateway, "gateway", "g", "http://127.0.0.1:9091", "Pushgateway URL, can be overwritten by setting OSPROBE_GATEWAY")
+	flag.StringVarP(&cfg, "config", "c", "servers.json", "Server definitions, can be overwritten by setting OSPROBE_CONFIG")
+	flag.Int64VarP(&interval, "interval", "i", 3600, "Refresh interval(seconds), can be overwritten by setting OSPROBE_INTERVAL")
 	flag.Parse()
-	if job == "" || gateway == "" || cfg == "" {
+
+	ejob := getEnvVar("OSPROBE_JOB")
+	if ejob != "" {
+		job = ejob
+	}
+	egateway := getEnvVar("OSPROBE_GATEWAY")
+	if egateway != "" {
+		gateway = egateway
+	}
+	ecfg := getEnvVar("OSPROBE_CONFIG")
+	if ecfg != "" {
+		cfg = ecfg
+	}
+	einterval := getEnvVar("OSPROBE_INTERVAL")
+	if einterval != "" {
+		v, e := strconv.ParseInt(einterval, 10, 64)
+		if e == nil {
+			if v > 0 {
+				interval = v
+			}
+		}
+	}
+
+	if job == "" || gateway == "" || cfg == "" || interval <= 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
 	log.Infof("Probe results will be pushed to %s with job %s", gateway, job)
+	log.Infof("Result will be update every %d seconds", interval)
 
 	// Collector init and register
 	sc := collector.NewServerCollector(cfg)
@@ -85,91 +187,8 @@ func main() {
 
 	// Mark if a round of probe is done
 	pdone := make(chan int)
-	// Probe based on defind interval in the background
-	go func() {
-		ticker := time.NewTicker(INTERVAL * time.Second)
-		defer ticker.Stop()
-
-		for {
-			// Periodical probe over servers
-			select {
-			case <-ticker.C:
-				var wg sync.WaitGroup
-				for _, server := range sc.Servers {
-					wg.Add(1)
-					go func(server probe.Server) {
-						log.Debug("Probe serve:", server.Host)
-						defer wg.Done()
-
-						// Initial stat for each server
-						stat := map[string]float64{
-							"online":          0,
-							"accessible":      0,
-							"cpu_utilization": 0,
-							"mem_utilization": 0,
-						}
-
-						online := server.Online()
-						if !online {
-							log.Errorf("Server %s is offline", server.Host)
-							sc.Mutex.Lock()
-							sc.Stat[server.Host] = stat
-							sc.Mutex.Unlock()
-							return
-						}
-						stat["online"] = 1
-
-						log.Debug("Create connection to server:", server.Host)
-						var p probe.Probe
-						var err error
-						switch t := server.Type; t {
-						case "linux":
-							p, err = linux.NewServer(server.Host, server.User, server.Password, server.Port)
-						case "windows":
-							p, err = windows.NewServer(server.Host, server.User, server.Password, server.Port)
-						case "esxi":
-							p, err = vmware.NewServer(server.Host, server.User, server.Password, server.Port)
-						default:
-							err = errors.New("Unsupported operating system")
-						}
-
-						if err != nil {
-							log.Error("Fail to connect to server:", server.Host)
-							sc.Mutex.Lock()
-							sc.Stat[server.Host] = stat
-							sc.Mutex.Unlock()
-							return
-						}
-						stat["accessible"] = 1
-
-						log.Debug("Gather CPU usage for server:", server.Host)
-						cpuUsage, err := p.GetCPUUsage()
-						if err != nil {
-							log.Error("Fail to probe CPU usage", err)
-						} else {
-							stat["cpu_utilization"] = cpuUsage
-						}
-
-						log.Debug("Gather memory usage for server:", server.Host)
-						memUsage, err := p.GetMemUsage()
-						if err != nil {
-							log.Error("Fail to probe memory usage", err)
-						} else {
-							stat["mem_utilization"] = memUsage
-						}
-
-						log.Debug("Update latest stat for server:", server.Host)
-						sc.Mutex.Lock()
-						sc.Stat[server.Host] = stat
-						sc.Mutex.Unlock()
-					}(server)
-				}
-				wg.Wait()
-				// Complete one round of collection
-				pdone <- 1
-			}
-		}
-	}()
+	// Update metrics based on defind interval in the background
+	go refreshMetrics(sc, interval, pdone)
 
 	// Push whenever a round of probe results is ready
 	for {
