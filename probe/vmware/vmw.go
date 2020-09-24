@@ -24,8 +24,6 @@ type Server struct {
 	client *vim25.Client
 }
 
-var esxiHosts []mo.HostSystem
-
 // NewServer init
 func NewServer(host, user, password string, port int) (Server, error) {
 	server := Server{
@@ -62,12 +60,9 @@ func NewServer(host, user, password string, port int) (Server, error) {
 
 // GetCPUUsage implement interface
 func (vmw Server) GetCPUUsage() (float64, error) {
-	var err error
-	if esxiHosts == nil || len(esxiHosts) == 0 {
-		esxiHosts, err = vmw.getHostMor()
-		if err != nil {
-			return 0, err
-		}
+	esxiHosts, err := vmw.getHostMor()
+	if err != nil {
+		return 0, err
 	}
 
 	var ret []float64
@@ -82,12 +77,9 @@ func (vmw Server) GetCPUUsage() (float64, error) {
 
 // GetMemUsage implement interface
 func (vmw Server) GetMemUsage() (float64, error) {
-	var err error
-	if esxiHosts == nil || len(esxiHosts) == 0 {
-		esxiHosts, err = vmw.getHostMor()
-		if err != nil {
-			return 0, err
-		}
+	esxiHosts, err := vmw.getHostMor()
+	if err != nil {
+		return 0, err
 	}
 
 	var ret []float64
