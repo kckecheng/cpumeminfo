@@ -11,6 +11,13 @@ We have a large num. of servers running in our lab, but engineers always compain
 Prerequisites
 --------------
 
+- Allow Pings;
+- Allow connections to ports (or just stop firewall):
+
+  * Linux: 22;
+  * Windows: 3389 (for OS dection), 5985 (for WinRM HTTP);
+  * ESXi: 902 (for OS dection), 443 (for vSphere API).
+
 - Linux: Password based ssh access;
 - Windows:
 
@@ -32,5 +39,15 @@ Usage
 
 ::
 
+  cd scanner
+  go build .
+  cp hosts.json hosts.real.json
+  vim hosts.test.json # Add your server IPs/FQDNs
+  cp credentials.json credentials.test.json
+  vim credentials.test.json # Define server access credentials
+  ./scanner -h
+  ./scanner -s hosts.test.json -p credentials.test.json -o servers.test.json
+  cd ..
   go build .
   ./osprobe -h
+  ./osprobe -c scanner/servers.test.json -g http://<pushgateway>:<port> -i <update interval>
