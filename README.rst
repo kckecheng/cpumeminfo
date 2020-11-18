@@ -41,7 +41,7 @@ Usage
 
   cd scanner
   go build .
-  cp hosts.json hosts.real.json
+  cp hosts.json hosts.test.json
   vim hosts.test.json # Add your server IPs/FQDNs
   cp credentials.json credentials.test.json
   vim credentials.test.json # Define server access credentials
